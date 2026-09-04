@@ -42,8 +42,7 @@
   .bidrow{display:flex;gap:8px;align-items:stretch;margin:10px 0}
   .bidrow button{width:56px;font-size:22px;padding:0}
   .bidrow .amt{flex:1;font-size:30px;font-weight:800;border:2px solid var(--ink);border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:center;padding:0 8px}
-  .bidrow .amt input{border:0;padding:6px 0;width:5ch;font-size:30px;font-weight:800;-moz-appearance:textfield}
-  .bidrow .amt input::-webkit-inner-spin-button{-webkit-appearance:none}
+  .seal.confirm{background:var(--gold);border-color:var(--gold);color:var(--ink)}
   #bidSlider{width:100%;accent-color:var(--red);margin:4px 0 10px}
   .seal{background:var(--red);border-color:var(--red)}
   .waiting{color:var(--muted);text-align:center;margin:12px 0}
@@ -83,7 +82,7 @@
   .side{display:flex;align-items:flex-end;gap:8px}
   .side img{width:120px;height:120px;object-fit:contain;transition:opacity .4s,transform .4s}
   .side img.out{opacity:0;transform:translateY(20px)}
-  .side img.shake{animation:shake .35s}
+  .side img.shake{animation:shake calc(.35s * var(--spd,1))}
   .near{justify-content:flex-end;margin-top:6px}
   .near img{width:140px;height:140px}
   .hpbox{background:#fff;border:2px solid var(--ink);border-radius:10px;padding:6px 10px;min-width:150px}
@@ -91,6 +90,40 @@
   .hpbar{height:8px;background:#e5e5e5;border-radius:4px;overflow:hidden;margin:4px 0}
   .hpbar i{display:block;height:100%;width:100%;background:var(--win);transition:width .5s,background .5s}
   .hpnum{font-size:12px;color:var(--muted)}
+  .roster{display:flex;gap:4px;justify-content:center;margin:6px 0}
+  .roster img{width:34px;height:34px;object-fit:contain;transition:filter .4s,opacity .4s}
+  .roster img.down{filter:grayscale(1);opacity:.3}
+  .roster img.active{outline:2px solid var(--red);border-radius:50%}
+  .fx{position:absolute;inset:0;pointer-events:none;z-index:2}
+  .proj{position:absolute;width:34px;height:34px;left:0;top:0;transform:translate(var(--x0),var(--y0)) scale(.6);
+    animation:fly calc(.55s * var(--spd,1)) ease-in forwards}
+  @keyframes fly{to{transform:translate(var(--x1),var(--y1)) scale(1.1)}}
+  .proj.fire{border-radius:50% 50% 50% 0;background:radial-gradient(circle at 40% 60%,#ffe066,#ff6b1a 55%,#c1121f);box-shadow:0 0 18px #ff8c42}
+  .proj.water{border-radius:50% 50% 50% 50%/60% 60% 40% 40%;background:radial-gradient(circle at 35% 35%,#dff6ff,#4cc9f0 50%,#1d6fa5);box-shadow:0 0 14px #4cc9f0}
+  .proj.ice{background:linear-gradient(135deg,#eaf9ff,#9ad8f7);clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);box-shadow:0 0 14px #bfefff}
+  .proj.grass{border-radius:0 60% 0 60%;background:linear-gradient(135deg,#a3d977,#2d6a4f);transform-origin:center}
+  .proj.electric{background:#ffe600;clip-path:polygon(45% 0,25% 45%,55% 45%,35% 100%,80% 40%,50% 40%,70% 0);box-shadow:0 0 16px #ffe600}
+  .proj.rock,.proj.ground,.proj.steel{border-radius:35% 55% 45% 50%;background:linear-gradient(135deg,#c9b79c,#6b5b45)}
+  .proj.steel{background:linear-gradient(135deg,#f1f1f1,#7d8597)}
+  .proj.poison{border-radius:50%;background:radial-gradient(circle at 35% 35%,#e0aaff,#7b2cbf);box-shadow:0 0 14px #b5179e}
+  .proj.dragon{border-radius:50%;background:radial-gradient(circle,#c8b6ff,#5a189a);box-shadow:0 0 18px #7b2cbf}
+  .proj.fairy{border-radius:50%;background:radial-gradient(circle,#fff0f6,#ff85a1);box-shadow:0 0 18px #ffb3c6}
+  .proj.flying{border-radius:60% 40% 60% 40%;background:linear-gradient(135deg,#fff,#a2d2ff);opacity:.9}
+  .proj.bug{border-radius:50%;background:radial-gradient(circle,#d8f3a3,#6a994e)}
+  .proj.normal,.proj.fighting{border-radius:50%;background:radial-gradient(circle,#fff,#adb5bd);opacity:.8}
+  .wave{position:absolute;width:40px;height:40px;border-radius:50%;border:3px solid;left:0;top:0;
+    transform:translate(var(--x1),var(--y1)) scale(.2);opacity:1;animation:ripple calc(.7s * var(--spd,1)) ease-out forwards}
+  .wave.psychic{border-color:#c77dff;box-shadow:0 0 12px #c77dff}
+  .wave.ghost{border-color:#5a189a}
+  .wave.dark{border-color:#212529}
+  @keyframes ripple{to{transform:translate(var(--x1),var(--y1)) scale(3.2);opacity:0}}
+  .impact{position:absolute;width:56px;height:56px;left:0;top:0;transform:translate(var(--x1),var(--y1)) scale(.3);
+    background:#fff;clip-path:polygon(50% 0,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%);
+    animation:pop calc(.4s * var(--spd,1)) ease-out forwards}
+  @keyframes pop{50%{transform:translate(var(--x1),var(--y1)) scale(1.2);opacity:1}to{opacity:0}}
+  .side img.lunge{animation:lunge calc(.45s * var(--spd,1)) ease-in-out}
+  @keyframes lunge{50%{transform:translate(var(--lx),var(--ly)) scale(1.05)}}
+  @media (prefers-reduced-motion:reduce){.proj,.wave,.impact,.side img.lunge{animation:none;opacity:0}}
   .commentary{font-weight:600;margin:12px 0 4px;min-height:2.6em}
   @keyframes shake{0%,100%{transform:none}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
   @media (prefers-reduced-motion:reduce){.side img{transition:none;animation:none}}
@@ -154,7 +187,7 @@
     <div id="bidding" class="hidden">
       <div class="bidrow">
         <button class="secondary" id="minus">−</button>
-        <div class="amt">£<input id="bidAmt" type="number" inputmode="decimal" step="0.5" min="0" value="0"></div>
+        <div class="amt" id="bidAmt">£0.00</div>
         <button class="secondary" id="plus">+</button>
       </div>
       <input id="bidSlider" type="range" min="0" step="0.5" value="0">
@@ -199,12 +232,16 @@
     </div>
 
     <div id="arena" class="hidden">
+      <div class="roster" id="rosterFar"></div>
       <div class="field">
+        <div class="fx" id="fx"></div>
         <div class="side" id="sideFar"><div class="hpbox"><div class="hpname"></div><div class="hpbar"><i></i></div><div class="hpnum"></div></div><img alt=""></div>
         <div class="side near" id="sideNear"><img alt=""><div class="hpbox"><div class="hpname"></div><div class="hpbar"><i></i></div><div class="hpnum"></div></div></div>
       </div>
+      <div class="roster" id="rosterNear"></div>
       <div class="commentary" id="commentary">The battle is about to begin.</div>
       <div class="lineupBtns">
+        <button class="secondary" id="speedBtn">1×</button>
         <button class="secondary" id="skipBtn">Skip to result</button>
         <button id="playBtn">Play battle</button>
       </div>
@@ -252,8 +289,13 @@ $("startBtn").onclick = () => socket.emit("start");
 $("minus").onclick = () => setBid(bid - 0.5);
 $("plus").onclick = () => setBid(bid + 0.5);
 $("bidSlider").oninput = (e) => setBid(parseFloat(e.target.value));
-$("bidAmt").onchange = (e) => setBid(Math.round(parseFloat(e.target.value || 0) * 2) / 2);
-$("sealBtn").onclick = () => socket.emit("bid", bid);
+let armed = null;
+function disarm() { clearTimeout(armed); armed = null; $("sealBtn").classList.remove("confirm"); $("sealBtn").textContent = `Seal £${bid.toFixed(2)}`; }
+$("sealBtn").onclick = () => {
+  if (armed) { disarm(); return socket.emit("bid", bid); }
+  $("sealBtn").classList.add("confirm"); $("sealBtn").textContent = `Confirm £${bid.toFixed(2)}`;
+  armed = setTimeout(disarm, 4000);
+};
 $("guessBtn").onclick = () => socket.emit("guess", parseInt($("guess").value, 10));
 $("nextBtn").onclick = () => socket.emit("next");
 $("confirmBtn").onclick = () => { socket.emit("choose", pick); $("confirmBtn").disabled = true; };
@@ -262,13 +304,16 @@ $("lineupReset").onclick = () => { order = []; render(); };
 $("lineupBtn").onclick = () => socket.emit("lineup", order);
 $("playBtn").onclick = () => playBattle(false);
 $("skipBtn").onclick = () => playBattle(true);
+let speed = 1;
+$("speedBtn").onclick = () => { speed = speed === 1 ? 2 : 1; $("speedBtn").textContent = speed + "×"; document.documentElement.style.setProperty("--spd", 1 / speed); };
 $("againBtn").onclick = () => { sessionStorage.removeItem("pd_session"); location.href = "/"; };
 
 function setBid(v) {
   const me = state.players.find((p) => p.you);
   bid = Math.min(Math.max(0, isNaN(v) ? 0 : v), me.money);
-  $("bidAmt").value = bid.toFixed(2); $("bidAmt").max = me.money;
+  $("bidAmt").textContent = "£" + bid.toFixed(2);
   $("bidSlider").max = me.money; $("bidSlider").value = bid;
+  if (armed) disarm(); else $("sealBtn").textContent = `Seal £${bid.toFixed(2)}`;
 }
 
 socket.on("state", (s) => { state = s; $("gameErr").textContent = ""; render(); });
@@ -332,7 +377,8 @@ function render() {
   if (s.phase === "bidding") {
     if (!me.hasBid) setBid(Math.min(bid, me.money));
     show("bidWait", me.hasBid);
-    for (const id of ["sealBtn","minus","plus","bidSlider","bidAmt"]) $(id).disabled = me.hasBid;
+    for (const id of ["sealBtn","minus","plus","bidSlider"]) $(id).disabled = me.hasBid;
+    if (me.hasBid && armed) disarm();
   }
 
   show("tiebreak", s.phase === "tiebreak");
@@ -424,6 +470,11 @@ function render() {
   if (s.phase === "result" && !playback) {
     playback = { i: 0, running: false };
     $("result").classList.add("hidden");
+    const mySide = s.players.findIndex((p) => p.you);
+    for (const side of [0, 1]) {
+      const p = s.players[side], el = $(side === mySide ? "rosterNear" : "rosterFar");
+      el.innerHTML = p.team.map((m) => `<img src="${m.sprite}" alt="${m.name}" data-name="${m.name}">`).join("");
+    }
     $("commentary").textContent = "The battle is about to begin.";
     for (const side of ["sideFar", "sideNear"]) { $(side).querySelector("img").src = ""; $(side).querySelector(".hpname").textContent = ""; $(side).querySelector(".hpnum").textContent = ""; }
   }
@@ -452,28 +503,53 @@ function playBattle(skip) {
     el.querySelector(".hpnum").textContent = `${hp} / ${max}`;
   };
   const who = (side) => s.players[side].name;
+  const roster = (side) => $(side === mySide ? "rosterNear" : "rosterFar");
+  const PHYS = new Set(["normal","fighting","poison","ground","flying","bug","rock","steel","fairy"]);
+  const WAVE = new Set(["psychic","ghost","dark"]);
+  const centre = (el) => { const f = $("fx").getBoundingClientRect(), r = el.getBoundingClientRect(); return [r.left - f.left + r.width / 2, r.top - f.top + r.height / 2]; };
+  const animateHit = (side, type) => {
+    if (skip) return;
+    const attImg = box(side).querySelector("img"), defImg = box(1 - side).querySelector("img");
+    const [x0, y0] = centre(attImg), [x1, y1] = centre(defImg);
+    const fx = $("fx");
+    const spawn = (cls) => { const d = document.createElement("div"); d.className = cls;
+      d.style.setProperty("--x0", (x0 - 17) + "px"); d.style.setProperty("--y0", (y0 - 17) + "px");
+      d.style.setProperty("--x1", (x1 - 20) + "px"); d.style.setProperty("--y1", (y1 - 20) + "px");
+      fx.appendChild(d); setTimeout(() => d.remove(), 1200); };
+    if (WAVE.has(type)) { spawn("wave " + type); setTimeout(() => spawn("wave " + type), 150 / speed); }
+    else if (PHYS.has(type)) {
+      attImg.style.setProperty("--lx", (x1 - x0) * 0.55 + "px"); attImg.style.setProperty("--ly", (y1 - y0) * 0.55 + "px");
+      attImg.classList.remove("lunge"); void attImg.offsetWidth; attImg.classList.add("lunge");
+      setTimeout(() => spawn("impact"), 200 / speed);
+    } else { spawn("proj " + type); if (type === "fire" || type === "water") setTimeout(() => spawn("proj " + type), 120 / speed); }
+  };
   const effText = (e) => e === 0 ? "It had no effect." : e >= 2 ? "Super effective!" : e < 1 ? "Not very effective." : "";
   const step = () => {
     const e = b.events[playback.i++];
     if (!e) return;
-    let delay = skip ? 0 : 1100;
+    let delay = skip ? 0 : 1100 / speed;
     if (e.t === "send") {
       const el = box(e.side), img = el.querySelector("img");
       img.classList.remove("out"); img.src = e.mon.sprite; img.alt = e.mon.name;
       el.querySelector(".hpname").textContent = e.mon.name;
       setHp(e.side, e.mon.hp, e.mon.maxHp);
       $("commentary").textContent = `${who(e.side)} sends out ${e.mon.name}.`;
-      delay = skip ? 0 : 900;
+      for (const im of roster(e.side).querySelectorAll("img")) im.classList.toggle("active", im.dataset.name === e.mon.name && !im.classList.contains("down"));
+      delay = skip ? 0 : 900 / speed;
     } else if (e.t === "hit") {
       const target = 1 - e.side, el = box(target), img = el.querySelector("img");
       const attacker = box(e.side).querySelector(".hpname").textContent;
       $("commentary").textContent = `${attacker} used ${e.move}. ${effText(e.eff)}`;
-      if (!skip) { img.classList.remove("shake"); void img.offsetWidth; img.classList.add("shake"); }
-      setHp(target, e.hp, e.maxHp);
+      animateHit(e.side, e.type);
+      const land = skip ? 0 : 480 / speed;
+      setTimeout(() => { if (!skip) { img.classList.remove("shake"); void img.offsetWidth; img.classList.add("shake"); } setHp(target, e.hp, e.maxHp); }, land);
+      delay = skip ? 0 : 1400 / speed;
     } else if (e.t === "faint") {
       box(e.side).querySelector("img").classList.add("out");
       $("commentary").textContent = `${e.mon.name} fainted.`;
-      delay = skip ? 0 : 800;
+      const im = [...roster(e.side).querySelectorAll("img")].find((x) => x.dataset.name === e.mon.name && !x.classList.contains("down"));
+      if (im) { im.classList.add("down"); im.classList.remove("active"); }
+      delay = skip ? 0 : 800 / speed;
     } else if (e.t === "end") {
       const w = s.players.find((p) => p.id === b.winnerId);
       $("resultTitle").textContent = w ? (w.you ? "You win!" : `${w.name} wins.`) : "Draw.";
