@@ -4,6 +4,7 @@ import { Server } from "socket.io";
 import { randomBytes } from "crypto";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import { simulate, TYPES } from "./battle.js";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const app = express();
@@ -18,8 +19,10 @@ const TEAM_SIZE = 6;
 const POOL_SIZE = TEAM_SIZE * 2;
 const EXACT_GUESS_BONUS = 1;
 const UPGRADES = ["swap", "evolve", "tm"]; // post-draft auctions, in order
-const TYPES = ["normal","fire","water","grass","electric","ice","fighting","poison","ground","flying",
-  "psychic","bug","rock","ghost","dragon","dark","steel","fairy"];
+const LINEUP_SECONDS = 60;
+const POWER_TIERS = [60, 75, 90];
+const LUCKY_CHANCE = 0.2;      // chance a drafted/mystery Pokémon rolls one power tier up
+const FULL_EVOLVE_CHANCE = 0.2; // chance the evolve auction is "evolve to final form"
 
 const GENS = {
   all: [1, 1025],
@@ -48,25 +51,45 @@ async function fetchPokemon(id) {
   return p;
 }
 const idFromUrl = (u) => +u.split("/").filter(Boolean).pop();
-const evoCache = new Map();
-// next evolution stage(s) for a species id → [{id,name}]
-async function fetchEvolutions(id) {
-  if (evoCache.has(id)) return evoCache.get(id);
-  let out = [];
+const lineCache = new Map();
+// evolution line info for a species: stage (1-based), stages in its line, next stages, final forms
+async function fetchLine(id) {
+  if (lineCache.has(id)) return lineCache.get(id);
+  let line = { stage: 1, stages: 1, evolvesTo: [], finals: [] };
   try {
     const species = await api(`pokemon-species/${id}`);
     const chain = await api(species.evolution_chain.url.replace(/.*\/api\/v2\//, ""));
-    const find = (node) => {
-      if (idFromUrl(node.species.url) === id) return node;
-      for (const n of node.evolves_to) { const r = find(n); if (r) return r; }
+    const sp = (n) => ({ id: idFromUrl(n.species.url), name: n.species.name });
+    const depthBelow = (n) => n.evolves_to.length ? 1 + Math.max(...n.evolves_to.map(depthBelow)) : 0;
+    const leaves = (n) => n.evolves_to.length ? n.evolves_to.flatMap(leaves) : [sp(n)];
+    const find = (n, d) => {
+      if (idFromUrl(n.species.url) === id) return [n, d];
+      for (const c of n.evolves_to) { const r = find(c, d + 1); if (r) return r; }
       return null;
     };
-    const node = find(chain.chain);
-    if (node) out = node.evolves_to.map((n) => ({ id: idFromUrl(n.species.url), name: n.species.name }))
-      .filter((e) => e.id <= GENS.all[1]);
-  } catch { out = []; }
-  evoCache.set(id, out);
-  return out;
+    const hit = find(chain.chain, 0);
+    if (hit) {
+      const [node, depth] = hit;
+      line = { stage: depth + 1, stages: depth + 1 + depthBelow(node),
+        evolvesTo: node.evolves_to.map(sp).filter((e) => e.id <= GENS.all[1]),
+        finals: leaves(node).filter((e) => e.id <= GENS.all[1] && e.id !== id) };
+    }
+  } catch {}
+  lineCache.set(id, line);
+  return line;
+}
+const bst = (m) => Object.values(m.stats).reduce((a, b) => a + b, 0);
+function baseTier(mon, line) {
+  if (line.stages === 1) return bst(mon) >= 580 ? 2 : bst(mon) >= 450 ? 1 : 0;
+  if (line.stages === 2) return line.stage === 1 ? 0 : 2;
+  return Math.min(line.stage - 1, 2);
+}
+// attaches stage/stages/power/lucky to a (cloned) Pokémon
+async function prepare(mon, { roll = true, lucky = false } = {}) {
+  const line = await fetchLine(mon.id);
+  const isLucky = lucky || (roll && Math.random() < LUCKY_CHANCE);
+  const tier = Math.min(baseTier(mon, line) + (isLucky ? 1 : 0), POWER_TIERS.length - 1);
+  return { ...clone(mon), stage: line.stage, stages: line.stages, power: POWER_TIERS[tier], lucky: isLucky };
 }
 function randomId(gen) {
   const [lo, hi] = GENS[gen] || GENS.all;
@@ -87,8 +110,11 @@ function newRoom(gen) {
   const room = {
     code: code(),
     gen: GENS[gen] ? gen : "all",
-    stage: "draft", // draft | upgrade | done
-    phase: "lobby", // lobby | loading | bidding | tiebreak | reveal | choose | done
+    stage: "draft", // draft | upgrade | battle
+    phase: "lobby", // lobby | loading | bidding | tiebreak | reveal | choose | lineup | result
+    lineups: {}, // playerId -> [slot indexes]
+    lineupDeadline: null,
+    battle: null, // { events, winnerId }
     players: [],
     pool: [],
     round: 0,
@@ -96,7 +122,6 @@ function newRoom(gen) {
     reveal: null,
     tiebreak: null,
     upgrade: null, // { index, kind, mystery, winnerId, price }
-    evo: {}, // pokemonId -> [{id,name}]
     log: [],
   };
   rooms.set(room.code, room);
@@ -107,8 +132,8 @@ function currentLot(room) {
   if (room.stage === "draft") return room.pool[room.round];
   if (room.stage === "upgrade") {
     const u = room.upgrade;
-    if (u.kind === "swap") return { kind: "swap", mystery: { types: u.mystery.types, sprite: u.mystery.sprite } };
-    return { kind: u.kind };
+    if (u.kind === "swap") return { kind: "swap", mystery: { types: u.mystery.types, sprite: u.mystery.sprite, power: u.mystery.power, lucky: u.mystery.lucky } };
+    return { kind: u.kind, full: !!u.full };
   }
   return null;
 }
@@ -123,11 +148,11 @@ function publicState(room, viewerId) {
     round: room.round,
     poolSize: room.pool.length,
     lot: ["bidding", "tiebreak"].includes(room.phase) ? currentLot(room) : null,
-    upgrade: u ? { index: u.index, kind: u.kind, total: UPGRADES.length, winnerId: u.winnerId,
+    upgrade: u ? { index: u.index, kind: u.kind, full: !!u.full, total: UPGRADES.length, winnerId: u.winnerId,
       mystery: room.phase === "choose" && u.kind === "swap" ? { types: u.mystery.types, sprite: u.mystery.sprite } : null } : null,
     players: room.players.map((p) => ({
       id: p.id, name: p.name, money: p.money,
-      team: p.team.map((m) => ({ ...m, evolvesTo: room.evo[m.id] || [] })),
+      team: p.team.map((m) => ({ ...m, evolvesTo: lineCache.get(m.id)?.evolvesTo || [], finals: lineCache.get(m.id)?.finals || [] })),
       connected: !!p.socket,
       hasBid: room.bids[p.id] !== undefined,
       hasGuessed: room.tiebreak?.guesses[p.id] !== undefined,
@@ -135,6 +160,9 @@ function publicState(room, viewerId) {
     })),
     tiebreak: room.tiebreak ? { range: room.tiebreak.range, sprite: room.tiebreak.sprite } : null,
     reveal: room.reveal,
+    lineupDeadline: room.lineupDeadline,
+    lineupsIn: Object.keys(room.lineups),
+    battle: room.battle,
     types: TYPES,
     log: room.log.slice(-14),
   };
@@ -149,7 +177,7 @@ async function startGame(room) {
   room.phase = "loading";
   broadcast(room);
   try {
-    room.pool = await Promise.all(randomIds(room.gen, POOL_SIZE).map(fetchPokemon));
+    room.pool = await Promise.all(randomIds(room.gen, POOL_SIZE).map(async (id) => prepare(await fetchPokemon(id))));
   } catch (e) {
     room.phase = "lobby";
     say(room, `Couldn't load Pokémon (${e.message}). Try again.`);
@@ -251,27 +279,22 @@ async function startUpgrades(room) {
   room.phase = "loading";
   say(room, "Draft complete. Three upgrade auctions: swap, evolve, TM.");
   broadcast(room);
-  const ids = [...new Set(room.players.flatMap((p) => p.team.map((m) => m.id)))];
-  for (const id of ids) room.evo[id] = await fetchEvolutions(id);
+  for (const p of room.players) for (const m of p.team) await fetchLine(m.id);
   startUpgrade(room, 0);
 }
 
 async function startUpgrade(room, index) {
-  if (index >= UPGRADES.length) {
-    room.stage = "done"; room.phase = "done"; room.upgrade = null;
-    say(room, "Teams locked. Ready for battle.");
-    return broadcast(room);
-  }
+  if (index >= UPGRADES.length) return startLineup(room);
   const kind = UPGRADES[index];
-  room.upgrade = { index, kind, mystery: null, winnerId: null, price: 0 };
+  room.upgrade = { index, kind, mystery: null, winnerId: null, price: 0, full: kind === "evolve" && Math.random() < FULL_EVOLVE_CHANCE };
   if (kind === "swap") {
     room.phase = "loading"; broadcast(room);
-    try { room.upgrade.mystery = await fetchPokemon(randomId(room.gen)); }
+    try { room.upgrade.mystery = await prepare(await fetchPokemon(randomId(room.gen))); }
     catch { return startUpgrade(room, index + 1); }
   }
   room.phase = "bidding";
   say(room, { swap: "Swap auction: replace one of yours with the mystery Pokémon.",
-    evolve: "Evolve auction: evolve one of your Pokémon a stage.",
+    evolve: room.upgrade.full ? "Rare find! This evolve auction takes a Pokémon straight to its final form." : "Evolve auction: evolve one of your Pokémon a stage.",
     tm: "TM auction: teach one of your Pokémon a second move type." }[kind]);
   broadcast(room);
 }
@@ -284,22 +307,54 @@ async function applyChoice(room, player, choice) {
   if (u.kind === "swap") {
     player.team[choice.slot] = clone(u.mystery);
     say(room, `${player.name} swapped ${slot.name} for ${u.mystery.name}.`);
-    room.evo[u.mystery.id] = await fetchEvolutions(u.mystery.id);
   } else if (u.kind === "evolve") {
-    const opts = room.evo[slot.id] || [];
+    const line = lineCache.get(slot.id) || { evolvesTo: [], finals: [] };
+    const opts = u.full ? line.finals : line.evolvesTo;
     const target = opts.find((o) => o.id === choice.targetId) || (opts.length === 1 ? opts[0] : null);
     if (!target) return opts.length ? "Choose which evolution." : "That Pokémon can't evolve — pick another.";
     let evolved;
-    try { evolved = await fetchPokemon(target.id); } catch { return "Couldn't load the evolution. Try again."; }
-    player.team[choice.slot] = { ...clone(evolved), tm: slot.tm };
-    say(room, `${player.name} evolved ${slot.name} into ${evolved.name}.`);
-    room.evo[evolved.id] = await fetchEvolutions(evolved.id);
+    try { evolved = await prepare(await fetchPokemon(target.id), { roll: false, lucky: slot.lucky }); }
+    catch { return "Couldn't load the evolution. Try again."; }
+    player.team[choice.slot] = { ...evolved, tm: slot.tm };
+    say(room, `${player.name} evolved ${slot.name} into ${evolved.name}${u.full ? " (final form)" : ""}.`);
   } else if (u.kind === "tm") {
     if (!TYPES.includes(choice.type)) return "Pick a move type.";
     slot.tm = choice.type;
     say(room, `${player.name} taught ${slot.name} a ${choice.type} move.`);
   }
   return null;
+}
+
+// ---------- battle ----------
+function startLineup(room) {
+  room.upgrade = null;
+  room.stage = "battle";
+  room.phase = "lineup";
+  room.lineups = {};
+  room.lineupDeadline = Date.now() + LINEUP_SECONDS * 1000;
+  say(room, `Teams locked. ${LINEUP_SECONDS} seconds to set your battle order.`);
+  broadcast(room);
+  room.lineupTimer = setTimeout(() => {
+    if (room.phase !== "lineup") return;
+    for (const p of room.players) if (!room.lineups[p.id]) room.lineups[p.id] = p.team.map((_, i) => i);
+    runBattle(room);
+  }, LINEUP_SECONDS * 1000 + 500);
+}
+
+function validLineup(player, order) {
+  if (!Array.isArray(order) || order.length !== player.team.length) return false;
+  const seen = new Set(order);
+  return seen.size === order.length && order.every((i) => Number.isInteger(i) && player.team[i]);
+}
+
+function runBattle(room) {
+  clearTimeout(room.lineupTimer);
+  const teams = room.players.map((p) => ({ playerId: p.id, mons: room.lineups[p.id].map((i) => p.team[i]) }));
+  room.battle = simulate(teams);
+  room.phase = "result";
+  const w = room.players.find((p) => p.id === room.battle.winnerId);
+  say(room, w ? `${w.name} wins the battle.` : "The battle ended in a draw.");
+  broadcast(room);
 }
 
 // ---------- sockets ----------
@@ -357,6 +412,13 @@ io.on("connection", (socket) => {
     const err = await applyChoice(room, me, choice || {});
     if (err) return socket.emit("error_msg", err);
     startUpgrade(room, room.upgrade.index + 1);
+  });
+
+  socket.on("lineup", (order) => {
+    if (!room || room.phase !== "lineup" || room.lineups[me.id]) return;
+    if (!validLineup(me, order)) return socket.emit("error_msg", "Order must include each of your Pokémon once.");
+    room.lineups[me.id] = order;
+    if (Object.keys(room.lineups).length === 2) runBattle(room); else broadcast(room);
   });
 
   socket.on("disconnect", () => {

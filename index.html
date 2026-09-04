@@ -77,11 +77,30 @@
   .evochoice{display:flex;gap:8px;margin:8px 0}
   .evochoice button.selected{background:var(--red);border-color:var(--red)}
 
+  .lineupBtns{display:flex;gap:8px;margin-top:10px}
+  .slot .order{position:absolute;top:2px;left:4px;font-size:15px;font-weight:800;background:var(--red);color:#fff;border-radius:50%;width:22px;height:22px;line-height:22px;text-align:center}
+  .field{position:relative;background:linear-gradient(#e8f0f7 0,#cfe3d3 100%);border:2px solid var(--line);border-radius:14px;padding:12px;min-height:270px;overflow:hidden}
+  .side{display:flex;align-items:flex-end;gap:8px}
+  .side img{width:120px;height:120px;object-fit:contain;transition:opacity .4s,transform .4s}
+  .side img.out{opacity:0;transform:translateY(20px)}
+  .side img.shake{animation:shake .35s}
+  .near{justify-content:flex-end;margin-top:6px}
+  .near img{width:140px;height:140px}
+  .hpbox{background:#fff;border:2px solid var(--ink);border-radius:10px;padding:6px 10px;min-width:150px}
+  .hpname{font-weight:700;text-transform:capitalize;font-size:14px}
+  .hpbar{height:8px;background:#e5e5e5;border-radius:4px;overflow:hidden;margin:4px 0}
+  .hpbar i{display:block;height:100%;width:100%;background:var(--win);transition:width .5s,background .5s}
+  .hpnum{font-size:12px;color:var(--muted)}
+  .commentary{font-weight:600;margin:12px 0 4px;min-height:2.6em}
+  @keyframes shake{0%,100%{transform:none}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+  @media (prefers-reduced-motion:reduce){.side img{transition:none;animation:none}}
   .log{margin-top:20px;font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
   .log div{padding:2px 0}
   .share{display:flex;gap:8px}
   .share input{font-size:14px}
   .share button{width:auto;padding:0 14px}
+  .lucky{background:var(--gold);color:var(--ink);border-radius:6px;padding:0 6px;font-weight:700}
+  .slot .pw{position:absolute;bottom:2px;left:4px;font-size:11px;font-weight:700;color:var(--muted)}
   .err{color:var(--red);font-weight:600;min-height:1.3em}
 </style>
 </head>
@@ -168,9 +187,32 @@
       <p class="waiting hidden" id="chooseWait"></p>
     </div>
 
-    <div id="done" class="hidden">
-      <h2>Teams locked</h2>
-      <p class="sub">Battle scene coming next.</p>
+    <div id="lineup" class="hidden">
+      <h2>Set your battle order</h2>
+      <p class="sub">Tap your Pokémon in the order they'll fight. Both orders are sealed. <b id="countdown"></b></p>
+      <div class="slots" id="lineupSlots"></div>
+      <div class="lineupBtns">
+        <button class="secondary" id="lineupReset">Start over</button>
+        <button id="lineupBtn" disabled>Lock in order</button>
+      </div>
+      <p class="waiting hidden" id="lineupWait">Order locked. Waiting for your opponent…</p>
+    </div>
+
+    <div id="arena" class="hidden">
+      <div class="field">
+        <div class="side" id="sideFar"><div class="hpbox"><div class="hpname"></div><div class="hpbar"><i></i></div><div class="hpnum"></div></div><img alt=""></div>
+        <div class="side near" id="sideNear"><img alt=""><div class="hpbox"><div class="hpname"></div><div class="hpbar"><i></i></div><div class="hpnum"></div></div></div>
+      </div>
+      <div class="commentary" id="commentary">The battle is about to begin.</div>
+      <div class="lineupBtns">
+        <button class="secondary" id="skipBtn">Skip to result</button>
+        <button id="playBtn">Play battle</button>
+      </div>
+      <div id="result" class="hidden">
+        <h2 id="resultTitle"></h2>
+        <p class="sub">Create a new room to play again.</p>
+        <button class="secondary" id="againBtn">New draft</button>
+      </div>
     </div>
 
     <div class="teams" id="teams"></div>
@@ -185,6 +227,7 @@ const $ = (id) => document.getElementById(id);
 const socket = io();
 const inviteCode = new URL(location.href).searchParams.get("room");
 let state = null, myId = null, bid = 0, pick = { slot: null, targetId: null, type: null };
+let order = [], countdownTimer = null, playback = null;
 
 $("name").value = localStorage.getItem("pd_name") || "";
 if (inviteCode) { $("createBox").classList.add("hidden"); $("joinBox").classList.remove("hidden"); $("joinCode").textContent = inviteCode; }
@@ -215,6 +258,11 @@ $("guessBtn").onclick = () => socket.emit("guess", parseInt($("guess").value, 10
 $("nextBtn").onclick = () => socket.emit("next");
 $("confirmBtn").onclick = () => { socket.emit("choose", pick); $("confirmBtn").disabled = true; };
 socket.on("error_msg", (m) => { $("gameErr").textContent = m; $("confirmBtn").disabled = false; });
+$("lineupReset").onclick = () => { order = []; render(); };
+$("lineupBtn").onclick = () => socket.emit("lineup", order);
+$("playBtn").onclick = () => playBattle(false);
+$("skipBtn").onclick = () => playBattle(true);
+$("againBtn").onclick = () => { sessionStorage.removeItem("pd_session"); location.href = "/"; };
 
 function setBid(v) {
   const me = state.players.find((p) => p.you);
@@ -225,10 +273,12 @@ function setBid(v) {
 
 socket.on("state", (s) => { state = s; $("gameErr").textContent = ""; render(); });
 
+const stageText = (m) => m.stages === 1 ? "single-stage" : `stage ${m.stage} of ${m.stages}`;
+const powerLine = (m) => m.power ? `Move power <b>${m.power}</b>${m.stages ? ` (${stageText(m)})` : ""}${m.lucky ? ' <span class="lucky">Lucky roll!</span>' : ""}` : "";
 const STAT = [["HP","hp"],["Atk","attack"],["Def","defense"],["SpA","special-attack"],["SpD","special-defense"],["Spe","speed"]];
 const UPG = {
   swap: { title: "Swap", note: "Winner must replace one of their Pokémon with this mystery Pokémon.", chooseTitle: "Choose who to swap out", help: "You'll see who it is after you confirm." },
-  evolve: { title: "Evolve", note: "Winner evolves one Pokémon a stage. Evolvable Pokémon are marked ↑ below.", chooseTitle: "Choose who evolves", help: "Only Pokémon marked ↑ can evolve." },
+  evolve: { title: "Evolve", note: "Winner evolves one Pokémon a stage. Evolvable Pokémon are marked ↑ below. Move power rises with stage.", chooseTitle: "Choose who evolves", help: "Only Pokémon marked ↑ can evolve." },
   tm: { title: "TM", note: "Winner teaches one Pokémon a second move type for the battle.", chooseTitle: "Choose who learns the TM", help: "Pick a Pokémon, then a move type." },
 };
 
@@ -258,12 +308,13 @@ function render() {
     if (lot.kind) {
       const u = UPG[lot.kind];
       $("roundLabel").textContent = `Upgrade ${s.upgrade.index + 1} of ${s.upgrade.total}`;
-      $("monName").textContent = u.title;
-      $("lotNote").textContent = u.note;
+      $("monName").textContent = lot.kind === "evolve" && lot.full ? "Evolve to final form" : u.title;
+      $("lotNote").textContent = lot.kind === "evolve" && lot.full ? "Rare find: the winner takes one Pokémon straight to the end of its line." : u.note;
       $("monStats").innerHTML = "";
       if (lot.kind === "swap") {
         $("monImg").src = lot.mystery.sprite; $("monImg").className = "silhouette"; $("monImg").alt = "Mystery Pokémon";
         $("monTypes").innerHTML = lot.mystery.types.map((t) => `<span>${t}</span>`).join("");
+        $("lotNote").innerHTML = u.note + "<br>" + powerLine(lot.mystery);
       } else { $("monImg").src = ""; $("monImg").className = ""; $("monTypes").innerHTML = ""; }
       $("monImg").classList.toggle("hidden", lot.kind !== "swap");
     } else {
@@ -273,7 +324,7 @@ function render() {
       $("monName").textContent = lot.name;
       $("monTypes").innerHTML = lot.types.map((t) => `<span>${t}</span>`).join("");
       $("monStats").innerHTML = STAT.map(([k, key]) => `<div><b>${lot.stats[key]}</b>${k}</div>`).join("");
-      $("lotNote").textContent = "";
+      $("lotNote").innerHTML = powerLine(lot);
     }
   }
 
@@ -320,16 +371,17 @@ function render() {
     $("confirmBtn").classList.toggle("hidden", !mine);
     if (mine) {
       $("chooseSlots").innerHTML = me.team.map((m, i) => {
-        const can = u.kind !== "evolve" || m.evolvesTo.length > 0;
+        const can = u.kind !== "evolve" || (u.full ? m.finals : m.evolvesTo).length > 0;
         return `<button class="slot filled ${pick.slot === i ? "selected" : ""}" data-i="${i}" ${can ? "" : "disabled"} title="${m.name}">
           <img src="${m.sprite}" alt="${m.name}">${m.evolvesTo.length ? '<span class="evo">↑</span>' : ""}${m.tm ? `<span class="badge">${m.tm}</span>` : ""}</button>`;
       }).join("");
       for (const b of $("chooseSlots").querySelectorAll("button")) b.onclick = () => { pick.slot = +b.dataset.i; pick.targetId = null; render(); };
       const sel = pick.slot !== null ? me.team[pick.slot] : null;
-      const branches = u.kind === "evolve" && sel && sel.evolvesTo.length > 1;
+      const evoOpts = sel ? (u.full ? sel.finals : sel.evolvesTo) : [];
+      const branches = u.kind === "evolve" && sel && evoOpts.length > 1;
       show("evoChoice", branches);
       if (branches) {
-        $("evoChoice").innerHTML = sel.evolvesTo.map((e) => `<button class="secondary ${pick.targetId === e.id ? "selected" : ""}" data-id="${e.id}">${e.name}</button>`).join("");
+        $("evoChoice").innerHTML = evoOpts.map((e) => `<button class="secondary ${pick.targetId === e.id ? "selected" : ""}" data-id="${e.id}">${e.name}</button>`).join("");
         for (const b of $("evoChoice").querySelectorAll("button")) b.onclick = () => { pick.targetId = +b.dataset.id; render(); };
       }
       show("typeGrid", u.kind === "tm");
@@ -343,17 +395,94 @@ function render() {
     }
   } else pick = { slot: null, targetId: null, type: null };
 
-  show("done", s.phase === "done");
+  // battle order
+  show("lineup", s.phase === "lineup");
+  if (s.phase === "lineup") {
+    const locked = s.lineupsIn.includes(me.id);
+    $("lineupSlots").innerHTML = me.team.map((m, i) => {
+      const pos = order.indexOf(i);
+      return `<button class="slot filled ${pos >= 0 ? "selected" : ""}" data-i="${i}" ${locked ? "disabled" : ""} title="${m.name}">
+        <img src="${m.sprite}" alt="${m.name}">${pos >= 0 ? `<span class="order">${pos + 1}</span>` : ""}${m.tm ? `<span class="badge">${m.tm}</span>` : ""}</button>`;
+    }).join("");
+    for (const b of $("lineupSlots").querySelectorAll("button")) b.onclick = () => {
+      const i = +b.dataset.i;
+      order = order.includes(i) ? order.filter((x) => x !== i) : [...order, i];
+      render();
+    };
+    $("lineupBtn").disabled = locked || order.length !== me.team.length;
+    $("lineupReset").disabled = locked;
+    show("lineupWait", locked);
+    if (!countdownTimer) countdownTimer = setInterval(() => {
+      const left = Math.max(0, Math.ceil((s.lineupDeadline - Date.now()) / 1000));
+      $("countdown").textContent = `${left}s left.`;
+      if (left === 0) { clearInterval(countdownTimer); countdownTimer = null; }
+    }, 250);
+  } else if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+
+  // battle playback
+  show("arena", s.phase === "result");
+  if (s.phase === "result" && !playback) {
+    playback = { i: 0, running: false };
+    $("result").classList.add("hidden");
+    $("commentary").textContent = "The battle is about to begin.";
+    for (const side of ["sideFar", "sideNear"]) { $(side).querySelector("img").src = ""; $(side).querySelector(".hpname").textContent = ""; $(side).querySelector(".hpnum").textContent = ""; }
+  }
 
   $("teams").innerHTML = s.players.map((p) => `
     <div class="team"><h3>${esc(p.name)}'s team</h3><div class="slots">
       ${Array.from({ length: 6 }, (_, i) => p.team[i]
         ? `<div class="slot filled" title="${p.team[i].name}"><img src="${p.team[i].sprite}" alt="${p.team[i].name}">
-            ${p.team[i].evolvesTo.length && s.stage !== "draft" ? '<span class="evo">↑</span>' : ""}${p.team[i].tm ? `<span class="badge">${p.team[i].tm}</span>` : ""}</div>`
+            ${p.team[i].evolvesTo.length && s.stage !== "draft" ? '<span class="evo">↑</span>' : ""}${p.team[i].tm ? `<span class="badge">${p.team[i].tm}</span>` : ""}<span class="pw">${p.team[i].power || ""}${p.team[i].lucky ? "★" : ""}</span></div>`
         : `<div class="slot"></div>`).join("")}
     </div></div>`).join("");
 
   $("log").innerHTML = s.log.slice().reverse().map((l) => `<div>${esc(l)}</div>`).join("");
+}
+function playBattle(skip) {
+  const s = state, b = s.battle;
+  if (!b || playback.running) return;
+  playback.running = true;
+  $("playBtn").disabled = true;
+  const mySide = s.players.findIndex((p) => p.you); // my Pokémon shown near, opponent far
+  const box = (side) => $(side === mySide ? "sideNear" : "sideFar");
+  const setHp = (side, hp, max) => {
+    const el = box(side); const pct = Math.round((hp / max) * 100);
+    el.querySelector(".hpbar i").style.width = pct + "%";
+    el.querySelector(".hpbar i").style.background = pct > 50 ? "var(--win)" : pct > 20 ? "var(--gold)" : "var(--red)";
+    el.querySelector(".hpnum").textContent = `${hp} / ${max}`;
+  };
+  const who = (side) => s.players[side].name;
+  const effText = (e) => e === 0 ? "It had no effect." : e >= 2 ? "Super effective!" : e < 1 ? "Not very effective." : "";
+  const step = () => {
+    const e = b.events[playback.i++];
+    if (!e) return;
+    let delay = skip ? 0 : 1100;
+    if (e.t === "send") {
+      const el = box(e.side), img = el.querySelector("img");
+      img.classList.remove("out"); img.src = e.mon.sprite; img.alt = e.mon.name;
+      el.querySelector(".hpname").textContent = e.mon.name;
+      setHp(e.side, e.mon.hp, e.mon.maxHp);
+      $("commentary").textContent = `${who(e.side)} sends out ${e.mon.name}.`;
+      delay = skip ? 0 : 900;
+    } else if (e.t === "hit") {
+      const target = 1 - e.side, el = box(target), img = el.querySelector("img");
+      const attacker = box(e.side).querySelector(".hpname").textContent;
+      $("commentary").textContent = `${attacker} used ${e.move}. ${effText(e.eff)}`;
+      if (!skip) { img.classList.remove("shake"); void img.offsetWidth; img.classList.add("shake"); }
+      setHp(target, e.hp, e.maxHp);
+    } else if (e.t === "faint") {
+      box(e.side).querySelector("img").classList.add("out");
+      $("commentary").textContent = `${e.mon.name} fainted.`;
+      delay = skip ? 0 : 800;
+    } else if (e.t === "end") {
+      const w = s.players.find((p) => p.id === b.winnerId);
+      $("resultTitle").textContent = w ? (w.you ? "You win!" : `${w.name} wins.`) : "Draw.";
+      $("result").classList.remove("hidden");
+      return;
+    }
+    setTimeout(step, delay);
+  };
+  step();
 }
 function esc(t) { return String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 </script>

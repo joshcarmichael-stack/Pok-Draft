@@ -23,6 +23,10 @@ or deploy to Render / Railway / Fly — it's a single Node process, no database 
 - TM: winner gives one Pokémon a second move type (stored as `tm`).
 - £0 bids allowed; a £0–£0 tie still goes to the tiebreak.
 
+## Battle
+- After the TM auction, 60 seconds to order your six (tap in order). Both orders are sealed.
+- Engine in `battle.js`: level-50 stats, full type chart, one 90-power STAB move per type plus the TM move, physical/special split by type, speed decides order, 0.85–1.0 damage roll. Auto-picks the strongest move each turn.
+- Result plays back with HP bars; skip button jumps to the outcome.
+
 ## Not yet built
-- Battle scene (state has everything needed: `players[].team[].stats / types`).
 - Random per-battle events.
