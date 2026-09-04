@@ -50,8 +50,13 @@
   /* bidding */
   .bidrow{display:flex;gap:8px;align-items:stretch;margin:10px 0}
   .bidrow button{width:56px;font-size:22px;padding:0}
-  .bidrow .amt{flex:1;text-align:center;font-size:30px;font-weight:800;border:2px solid var(--ink);
-    border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:center}
+  .bidrow .amt{flex:1;font-size:30px;font-weight:800;border:2px solid var(--ink);
+    border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:center;padding:0 8px}
+  .bidrow .amt input{border:0;padding:6px 0;width:5ch;font-size:30px;font-weight:800;text-align:left;-moz-appearance:textfield}
+  .bidrow .amt input::-webkit-inner-spin-button{-webkit-appearance:none}
+  #bidSlider{width:100%;accent-color:var(--red);margin:4px 0 10px}
+  .hidden-mon{text-align:center}
+  .hidden-mon img{width:150px;height:150px;object-fit:contain}
   .seal{background:var(--red);border-color:var(--red)}
   .waiting{color:var(--muted);text-align:center;margin:12px 0}
 
@@ -142,15 +147,17 @@
     <div id="bidding" class="hidden">
       <div class="bidrow">
         <button class="secondary" id="minus">−</button>
-        <div class="amt" id="bidAmt">£0.00</div>
+        <div class="amt">£<input id="bidAmt" type="number" inputmode="decimal" step="0.5" min="0" value="0"></div>
         <button class="secondary" id="plus">+</button>
       </div>
+      <input id="bidSlider" type="range" min="0" step="0.5" value="0">
       <button id="sealBtn" class="seal">Seal bid</button>
       <p class="waiting hidden" id="bidWait">Bid sealed. Waiting for your opponent…</p>
     </div>
 
     <div id="tiebreak" class="hidden">
-      <p><b>Tied bids.</b> A hidden Pokémon has been drawn — closest guess to its Pokédex number wins. Spot on earns £1.</p>
+      <p><b>Tied bids.</b> Who's that Pokémon? Closest guess to its Pokédex number wins. Spot on earns £1.</p>
+      <div class="hidden-mon"><img id="hiddenImg" alt="Mystery Pokémon"></div>
       <label for="guess">Your guess (<span id="guessRange"></span>)</label>
       <input id="guess" type="number" inputmode="numeric">
       <p></p>
@@ -212,6 +219,8 @@ $("copyBtn").onclick = () => navigator.clipboard.writeText($("shareUrl").value).
 $("startBtn").onclick = () => socket.emit("start");
 $("minus").onclick = () => setBid(bid - 0.5);
 $("plus").onclick = () => setBid(bid + 0.5);
+$("bidSlider").oninput = (e) => setBid(parseFloat(e.target.value));
+$("bidAmt").onchange = (e) => setBid(Math.round(parseFloat(e.target.value || 0) * 2) / 2);
 $("sealBtn").onclick = () => socket.emit("bid", bid);
 $("guessBtn").onclick = () => socket.emit("guess", parseInt($("guess").value, 10));
 $("nextBtn").onclick = () => socket.emit("next");
@@ -219,8 +228,10 @@ socket.on("error_msg", (m) => $("gameErr").textContent = m);
 
 function setBid(v) {
   const me = state.players.find((p) => p.you);
-  bid = Math.min(Math.max(0, v), me.money);
-  $("bidAmt").textContent = "£" + bid.toFixed(2);
+  bid = Math.min(Math.max(0, isNaN(v) ? 0 : v), me.money);
+  $("bidAmt").value = bid.toFixed(2);
+  $("bidSlider").max = me.money; $("bidSlider").value = bid;
+  $("bidAmt").max = me.money;
 }
 
 // ----- render -----
@@ -265,13 +276,14 @@ function render() {
   if (s.phase === "bidding") {
     if (!me.hasBid) setBid(Math.min(bid, me.money));
     show("bidWait", me.hasBid);
-    $("sealBtn").disabled = me.hasBid; $("minus").disabled = me.hasBid; $("plus").disabled = me.hasBid;
+    for (const id of ["sealBtn","minus","plus","bidSlider","bidAmt"]) $(id).disabled = me.hasBid;
   }
 
   // tiebreak
   show("tiebreak", s.phase === "tiebreak");
   if (s.phase === "tiebreak") {
     $("guessRange").textContent = `${s.tiebreak.range[0]}–${s.tiebreak.range[1]}`;
+    $("hiddenImg").src = s.tiebreak.sprite || "";
     $("guess").min = s.tiebreak.range[0]; $("guess").max = s.tiebreak.range[1];
     $("guessBtn").disabled = me.hasGuessed; $("guess").disabled = me.hasGuessed;
     show("guessWait", me.hasGuessed);

@@ -91,7 +91,7 @@ function publicState(room, viewerId) {
       hasGuessed: room.tiebreak?.guesses[p.id] !== undefined,
       you: p.id === viewerId,
     })),
-    tiebreak: room.tiebreak ? { range: room.tiebreak.range } : null,
+    tiebreak: room.tiebreak ? { range: room.tiebreak.range, sprite: room.tiebreak.sprite } : null,
     reveal: room.reveal,
     log: room.log.slice(-12),
   };
@@ -140,11 +140,20 @@ function resolveBids(room) {
     award(room, winner, mon, Math.max(ba, bb), "outbid");
   } else {
     // sealed tie → guess-the-Pokédex-number tiebreak
-    const [lo, hi] = GENS[room.gen];
-    room.tiebreak = { target: lo + Math.floor(Math.random() * (hi - lo + 1)), range: [lo, hi], guesses: {} };
-    room.phase = "tiebreak";
-    say(room, `Both bid £${ba.toFixed(2)} for ${mon.name}. Tiebreak: guess the hidden Pokédex number.`);
+    startTiebreak(room, ba, mon);
+    return;
   }
+  broadcast(room);
+}
+
+async function startTiebreak(room, amount, mon) {
+  const [lo, hi] = GENS.all;
+  let hidden;
+  try { hidden = await fetchPokemon(lo + Math.floor(Math.random() * (hi - lo + 1))); }
+  catch { hidden = { id: lo + Math.floor(Math.random() * (hi - lo + 1)), sprite: null }; }
+  room.tiebreak = { target: hidden.id, sprite: hidden.sprite, range: [lo, hi], guesses: {} };
+  room.phase = "tiebreak";
+  say(room, `Both bid £${amount.toFixed(2)} for ${mon.name}. Tiebreak: name that Pokémon's number.`);
   broadcast(room);
 }
 
@@ -160,7 +169,7 @@ function resolveTiebreak(room) {
   if (da !== db) { winner = da < db ? a : b; reason = "closer guess"; }
   else { winner = Math.random() < 0.5 ? a : b; reason = "coin flip"; }
 
-  room.reveal.tiebreak = { target: t.target, guesses: { [a.id]: ga, [b.id]: gb }, reason };
+  room.reveal.tiebreak = { target: t.target, sprite: t.sprite, guesses: { [a.id]: ga, [b.id]: gb }, reason };
   for (const p of [a, b]) {
     if (t.guesses[p.id] === t.target) {
       p.money += EXACT_GUESS_BONUS;
