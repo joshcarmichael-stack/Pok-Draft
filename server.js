@@ -15,10 +15,12 @@ app.get("/", (_req, res) => res.sendFile(join(__dirname, "index.html")));
 const START_MONEY = 20;
 const BID_STEP = 0.5;
 const TEAM_SIZE = 6;
-const POOL_SIZE = TEAM_SIZE * 2; // every Pokémon drawn ends up on a team
+const POOL_SIZE = TEAM_SIZE * 2;
 const EXACT_GUESS_BONUS = 1;
+const UPGRADES = ["swap", "evolve", "tm"]; // post-draft auctions, in order
+const TYPES = ["normal","fire","water","grass","electric","ice","fighting","poison","ground","flying",
+  "psychic","bug","rock","ghost","dragon","dark","steel","fairy"];
 
-// National Pokédex ranges per generation
 const GENS = {
   all: [1, 1025],
   1: [1, 151], 2: [152, 251], 3: [252, 386], 4: [387, 493],
@@ -27,29 +29,55 @@ const GENS = {
 
 // ---------- PokéAPI ----------
 const cache = new Map();
+async function api(path) {
+  const res = await fetch(`https://pokeapi.co/api/v2/${path}`);
+  if (!res.ok) throw new Error(`PokéAPI ${path}: ${res.status}`);
+  return res.json();
+}
 async function fetchPokemon(id) {
   if (cache.has(id)) return cache.get(id);
-  const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${id}`);
-  if (!res.ok) throw new Error(`PokéAPI ${id}: ${res.status}`);
-  const d = await res.json();
+  const d = await api(`pokemon/${id}`);
   const p = {
     id: d.id,
     name: d.name.replace(/-/g, " "),
-    sprite:
-      d.sprites.other?.["official-artwork"]?.front_default || d.sprites.front_default,
+    sprite: d.sprites.other?.["official-artwork"]?.front_default || d.sprites.front_default,
     types: d.types.map((t) => t.type.name),
     stats: Object.fromEntries(d.stats.map((s) => [s.stat.name, s.base_stat])),
   };
   cache.set(id, p);
   return p;
 }
-
-function randomIds(gen, n) {
+const idFromUrl = (u) => +u.split("/").filter(Boolean).pop();
+const evoCache = new Map();
+// next evolution stage(s) for a species id → [{id,name}]
+async function fetchEvolutions(id) {
+  if (evoCache.has(id)) return evoCache.get(id);
+  let out = [];
+  try {
+    const species = await api(`pokemon-species/${id}`);
+    const chain = await api(species.evolution_chain.url.replace(/.*\/api\/v2\//, ""));
+    const find = (node) => {
+      if (idFromUrl(node.species.url) === id) return node;
+      for (const n of node.evolves_to) { const r = find(n); if (r) return r; }
+      return null;
+    };
+    const node = find(chain.chain);
+    if (node) out = node.evolves_to.map((n) => ({ id: idFromUrl(n.species.url), name: n.species.name }))
+      .filter((e) => e.id <= GENS.all[1]);
+  } catch { out = []; }
+  evoCache.set(id, out);
+  return out;
+}
+function randomId(gen) {
   const [lo, hi] = GENS[gen] || GENS.all;
+  return lo + Math.floor(Math.random() * (hi - lo + 1));
+}
+function randomIds(gen, n) {
   const ids = new Set();
-  while (ids.size < n) ids.add(lo + Math.floor(Math.random() * (hi - lo + 1)));
+  while (ids.size < n) ids.add(randomId(gen));
   return [...ids];
 }
+const clone = (m) => JSON.parse(JSON.stringify(m));
 
 // ---------- rooms ----------
 const rooms = new Map();
@@ -59,33 +87,47 @@ function newRoom(gen) {
   const room = {
     code: code(),
     gen: GENS[gen] ? gen : "all",
-    phase: "lobby", // lobby | loading | bidding | reveal | tiebreak | done
-    players: [], // { id, name, money, team: [], socket }
+    stage: "draft", // draft | upgrade | done
+    phase: "lobby", // lobby | loading | bidding | tiebreak | reveal | choose | done
+    players: [],
     pool: [],
     round: 0,
     bids: {},
     reveal: null,
-    tiebreak: null, // { target, range, guesses }
+    tiebreak: null,
+    upgrade: null, // { index, kind, mystery, winnerId, price }
+    evo: {}, // pokemonId -> [{id,name}]
     log: [],
   };
   rooms.set(room.code, room);
   return room;
 }
 
+function currentLot(room) {
+  if (room.stage === "draft") return room.pool[room.round];
+  if (room.stage === "upgrade") {
+    const u = room.upgrade;
+    if (u.kind === "swap") return { kind: "swap", mystery: { types: u.mystery.types, sprite: u.mystery.sprite } };
+    return { kind: u.kind };
+  }
+  return null;
+}
+
 function publicState(room, viewerId) {
-  const other = (p) => p.id !== viewerId;
+  const u = room.upgrade;
   return {
     code: room.code,
     gen: room.gen,
+    stage: room.stage,
     phase: room.phase,
     round: room.round,
     poolSize: room.pool.length,
-    current: room.phase === "bidding" || room.phase === "tiebreak" ? room.pool[room.round] : null,
+    lot: ["bidding", "tiebreak"].includes(room.phase) ? currentLot(room) : null,
+    upgrade: u ? { index: u.index, kind: u.kind, total: UPGRADES.length, winnerId: u.winnerId,
+      mystery: room.phase === "choose" && u.kind === "swap" ? { types: u.mystery.types, sprite: u.mystery.sprite } : null } : null,
     players: room.players.map((p) => ({
-      id: p.id,
-      name: p.name,
-      money: p.money,
-      team: p.team,
+      id: p.id, name: p.name, money: p.money,
+      team: p.team.map((m) => ({ ...m, evolvesTo: room.evo[m.id] || [] })),
       connected: !!p.socket,
       hasBid: room.bids[p.id] !== undefined,
       hasGuessed: room.tiebreak?.guesses[p.id] !== undefined,
@@ -93,20 +135,16 @@ function publicState(room, viewerId) {
     })),
     tiebreak: room.tiebreak ? { range: room.tiebreak.range, sprite: room.tiebreak.sprite } : null,
     reveal: room.reveal,
-    log: room.log.slice(-12),
+    types: TYPES,
+    log: room.log.slice(-14),
   };
 }
-
 function broadcast(room) {
-  for (const p of room.players)
-    if (p.socket) p.socket.emit("state", publicState(room, p.id));
+  for (const p of room.players) if (p.socket) p.socket.emit("state", publicState(room, p.id));
 }
+const say = (room, text) => room.log.push(text);
 
-function say(room, text) {
-  room.log.push(text);
-}
-
-// ---------- game flow ----------
+// ---------- draft ----------
 async function startGame(room) {
   room.phase = "loading";
   broadcast(room);
@@ -132,28 +170,18 @@ function validBid(player, amount) {
 function resolveBids(room) {
   const [a, b] = room.players;
   const ba = room.bids[a.id], bb = room.bids[b.id];
-  const mon = room.pool[room.round];
-  room.reveal = { pokemon: mon, bids: { [a.id]: ba, [b.id]: bb }, winnerId: null, reason: null };
-
-  if (ba !== bb) {
-    const winner = ba > bb ? a : b;
-    award(room, winner, mon, Math.max(ba, bb), "outbid");
-  } else {
-    // sealed tie → guess-the-Pokédex-number tiebreak
-    startTiebreak(room, ba, mon);
-    return;
-  }
-  broadcast(room);
+  room.reveal = { lot: currentLot(room), bids: { [a.id]: ba, [b.id]: bb }, winnerId: null, reason: null };
+  if (ba !== bb) return finishAuction(room, ba > bb ? a : b, Math.max(ba, bb), "outbid");
+  startTiebreak(room, ba);
 }
 
-async function startTiebreak(room, amount, mon) {
+async function startTiebreak(room, amount) {
   const [lo, hi] = GENS.all;
   let hidden;
-  try { hidden = await fetchPokemon(lo + Math.floor(Math.random() * (hi - lo + 1))); }
-  catch { hidden = { id: lo + Math.floor(Math.random() * (hi - lo + 1)), sprite: null }; }
+  try { hidden = await fetchPokemon(randomId("all")); } catch { hidden = { id: randomId("all"), sprite: null }; }
   room.tiebreak = { target: hidden.id, sprite: hidden.sprite, range: [lo, hi], guesses: {} };
   room.phase = "tiebreak";
-  say(room, `Both bid £${amount.toFixed(2)} for ${mon.name}. Tiebreak: name that Pokémon's number.`);
+  say(room, `Both bid £${amount.toFixed(2)}. Tiebreak: name that Pokémon's number.`);
   broadcast(room);
 }
 
@@ -162,66 +190,126 @@ function resolveTiebreak(room) {
   const t = room.tiebreak;
   const ga = t.guesses[a.id], gb = t.guesses[b.id];
   const da = Math.abs(ga - t.target), db = Math.abs(gb - t.target);
-  const mon = room.pool[room.round];
   const price = room.bids[a.id];
-
   let winner, reason;
   if (da !== db) { winner = da < db ? a : b; reason = "closer guess"; }
   else { winner = Math.random() < 0.5 ? a : b; reason = "coin flip"; }
-
   room.reveal.tiebreak = { target: t.target, sprite: t.sprite, guesses: { [a.id]: ga, [b.id]: gb }, reason };
-  for (const p of [a, b]) {
-    if (t.guesses[p.id] === t.target) {
-      p.money += EXACT_GUESS_BONUS;
-      say(room, `${p.name} guessed #${t.target} exactly — +£${EXACT_GUESS_BONUS}.`);
-    }
+  for (const p of [a, b]) if (t.guesses[p.id] === t.target) {
+    p.money += EXACT_GUESS_BONUS;
+    say(room, `${p.name} guessed #${t.target} exactly — +£${EXACT_GUESS_BONUS}.`);
   }
   room.tiebreak = null;
-  award(room, winner, mon, price, reason);
-  broadcast(room);
+  finishAuction(room, winner, price, reason);
 }
 
-function award(room, winner, mon, price, reason) {
+function finishAuction(room, winner, price, reason) {
   winner.money = +(winner.money - price).toFixed(2);
-  winner.team.push(mon);
   room.reveal.winnerId = winner.id;
   room.reveal.reason = reason;
-  say(room, `${winner.name} wins ${mon.name} for £${price.toFixed(2)} (${reason}).`);
   room.bids = {};
-  room.phase = "reveal";
+  if (room.stage === "draft") {
+    const mon = room.pool[room.round];
+    winner.team.push(clone(mon));
+    say(room, `${winner.name} wins ${mon.name} for £${price.toFixed(2)} (${reason}).`);
+    room.phase = "reveal";
+    const full = room.players.find((p) => p.team.length >= TEAM_SIZE);
+    if (full) {
+      const other = room.players.find((p) => p !== full);
+      const leftovers = room.pool.slice(room.round + 1);
+      other.team.push(...leftovers.map(clone));
+      if (leftovers.length)
+        say(room, `${full.name} has a full team. ${other.name} gets ${leftovers.map((m) => m.name).join(", ")} for free.`);
+      room.round = room.pool.length; // draft over; next "next" moves to upgrades
+    }
+  } else {
+    const u = room.upgrade;
+    u.winnerId = winner.id; u.price = price;
+    say(room, `${winner.name} wins the ${u.kind} for £${price.toFixed(2)} (${reason}).`);
+    room.phase = "reveal";
+  }
+  broadcast(room);
+}
 
-  // one team full → the rest go free to the other player
-  const full = room.players.find((p) => p.team.length >= TEAM_SIZE);
-  if (full) {
-    const other = room.players.find((p) => p !== full);
-    const leftovers = room.pool.slice(room.round + 1);
-    other.team.push(...leftovers);
-    if (leftovers.length)
-      say(room, `${full.name} has a full team. ${other.name} gets ${leftovers.map((m) => m.name).join(", ")} for free.`);
-    room.phase = "done";
-    say(room, "Draft complete.");
+function nextStep(room) {
+  room.reveal = null;
+  if (room.stage === "draft") {
+    room.round += 1;
+    if (room.round >= room.pool.length) return startUpgrades(room);
+    room.phase = "bidding";
+    return broadcast(room);
+  }
+  if (room.stage === "upgrade") {
+    if (room.upgrade.winnerId) { room.phase = "choose"; return broadcast(room); }
+    return startUpgrade(room, room.upgrade.index + 1);
   }
 }
 
-function nextRound(room) {
-  room.round += 1;
-  room.reveal = null;
-  if (room.round >= room.pool.length) {
-    room.phase = "done";
-    say(room, "Draft complete.");
-  } else {
-    room.phase = "bidding";
-  }
+// ---------- upgrades ----------
+async function startUpgrades(room) {
+  room.stage = "upgrade";
+  room.phase = "loading";
+  say(room, "Draft complete. Three upgrade auctions: swap, evolve, TM.");
   broadcast(room);
+  const ids = [...new Set(room.players.flatMap((p) => p.team.map((m) => m.id)))];
+  for (const id of ids) room.evo[id] = await fetchEvolutions(id);
+  startUpgrade(room, 0);
+}
+
+async function startUpgrade(room, index) {
+  if (index >= UPGRADES.length) {
+    room.stage = "done"; room.phase = "done"; room.upgrade = null;
+    say(room, "Teams locked. Ready for battle.");
+    return broadcast(room);
+  }
+  const kind = UPGRADES[index];
+  room.upgrade = { index, kind, mystery: null, winnerId: null, price: 0 };
+  if (kind === "swap") {
+    room.phase = "loading"; broadcast(room);
+    try { room.upgrade.mystery = await fetchPokemon(randomId(room.gen)); }
+    catch { return startUpgrade(room, index + 1); }
+  }
+  room.phase = "bidding";
+  say(room, { swap: "Swap auction: replace one of yours with the mystery Pokémon.",
+    evolve: "Evolve auction: evolve one of your Pokémon a stage.",
+    tm: "TM auction: teach one of your Pokémon a second move type." }[kind]);
+  broadcast(room);
+}
+
+async function applyChoice(room, player, choice) {
+  const u = room.upgrade;
+  if (!u || u.winnerId !== player.id || room.phase !== "choose") return "Not your choice to make.";
+  const slot = player.team[choice.slot];
+  if (!slot) return "Pick a Pokémon from your team.";
+  if (u.kind === "swap") {
+    player.team[choice.slot] = clone(u.mystery);
+    say(room, `${player.name} swapped ${slot.name} for ${u.mystery.name}.`);
+    room.evo[u.mystery.id] = await fetchEvolutions(u.mystery.id);
+  } else if (u.kind === "evolve") {
+    const opts = room.evo[slot.id] || [];
+    const target = opts.find((o) => o.id === choice.targetId) || (opts.length === 1 ? opts[0] : null);
+    if (!target) return opts.length ? "Choose which evolution." : "That Pokémon can't evolve — pick another.";
+    let evolved;
+    try { evolved = await fetchPokemon(target.id); } catch { return "Couldn't load the evolution. Try again."; }
+    player.team[choice.slot] = { ...clone(evolved), tm: slot.tm };
+    say(room, `${player.name} evolved ${slot.name} into ${evolved.name}.`);
+    room.evo[evolved.id] = await fetchEvolutions(evolved.id);
+  } else if (u.kind === "tm") {
+    if (!TYPES.includes(choice.type)) return "Pick a move type.";
+    slot.tm = choice.type;
+    say(room, `${player.name} taught ${slot.name} a ${choice.type} move.`);
+  }
+  return null;
 }
 
 // ---------- sockets ----------
 io.on("connection", (socket) => {
   let room = null, me = null;
+  const newPlayer = (name) => ({ id: randomBytes(8).toString("hex"), name: clean(name), money: START_MONEY, team: [], socket });
 
   socket.on("create", ({ name, gen }, cb) => {
     room = newRoom(gen);
-    me = { id: randomBytes(8).toString("hex"), name: clean(name), money: START_MONEY, team: [], socket };
+    me = newPlayer(name);
     room.players.push(me);
     cb({ code: room.code, playerId: me.id });
     broadcast(room);
@@ -230,17 +318,11 @@ io.on("connection", (socket) => {
   socket.on("join", ({ code: c, name, playerId }, cb) => {
     const r = rooms.get((c || "").toUpperCase());
     if (!r) return cb({ error: "That room doesn't exist. Check the link." });
-    // rejoin
     const existing = r.players.find((p) => p.id === playerId);
-    if (existing) {
-      room = r; me = existing; me.socket = socket;
-      cb({ code: r.code, playerId: me.id });
-      return broadcast(r);
-    }
+    if (existing) { room = r; me = existing; me.socket = socket; cb({ code: r.code, playerId: me.id }); return broadcast(r); }
     if (r.players.length >= 2) return cb({ error: "That room already has two players." });
     if (r.phase !== "lobby") return cb({ error: "That draft has already started." });
-    room = r;
-    me = { id: randomBytes(8).toString("hex"), name: clean(name), money: START_MONEY, team: [], socket };
+    room = r; me = newPlayer(name);
     r.players.push(me);
     cb({ code: r.code, playerId: me.id });
     say(r, `${me.name} joined.`);
@@ -248,42 +330,42 @@ io.on("connection", (socket) => {
   });
 
   socket.on("start", () => {
-    if (!room || room.phase !== "lobby" || room.players.length !== 2) return;
-    startGame(room);
+    if (room && room.phase === "lobby" && room.players.length === 2) startGame(room);
   });
 
   socket.on("bid", (amount) => {
     if (!room || room.phase !== "bidding" || room.bids[me.id] !== undefined) return;
     if (!validBid(me, amount)) return socket.emit("error_msg", "Bid must be in 50p steps and within your money.");
     room.bids[me.id] = amount;
-    if (Object.keys(room.bids).length === 2) resolveBids(room);
-    else broadcast(room);
+    if (Object.keys(room.bids).length === 2) resolveBids(room); else broadcast(room);
   });
 
   socket.on("guess", (n) => {
     if (!room || room.phase !== "tiebreak" || room.tiebreak.guesses[me.id] !== undefined) return;
     const [lo, hi] = room.tiebreak.range;
-    if (!Number.isInteger(n) || n < lo || n > hi)
-      return socket.emit("error_msg", `Guess a whole number from ${lo} to ${hi}.`);
+    if (!Number.isInteger(n) || n < lo || n > hi) return socket.emit("error_msg", `Guess a whole number from ${lo} to ${hi}.`);
     room.tiebreak.guesses[me.id] = n;
-    if (Object.keys(room.tiebreak.guesses).length === 2) resolveTiebreak(room);
-    else broadcast(room);
+    if (Object.keys(room.tiebreak.guesses).length === 2) resolveTiebreak(room); else broadcast(room);
   });
 
   socket.on("next", () => {
-    if (!room || room.phase !== "reveal") return;
-    nextRound(room);
+    if (room && room.phase === "reveal") nextStep(room);
+  });
+
+  socket.on("choose", async (choice) => {
+    if (!room || room.phase !== "choose") return;
+    const err = await applyChoice(room, me, choice || {});
+    if (err) return socket.emit("error_msg", err);
+    startUpgrade(room, room.upgrade.index + 1);
   });
 
   socket.on("disconnect", () => {
-    if (me) me.socket = null;
+    if (me && me.socket === socket) me.socket = null;
     if (room) broadcast(room);
   });
 });
 
-function clean(name) {
-  return String(name || "Trainer").trim().slice(0, 16) || "Trainer";
-}
+const clean = (name) => String(name || "Trainer").trim().slice(0, 16) || "Trainer";
 
 const PORT = process.env.PORT || 3000;
 http.listen(PORT, () => console.log(`PokéDraft on http://localhost:${PORT}`));

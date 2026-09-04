@@ -5,20 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PokéDraft</title>
 <style>
-  :root{
-    --ink:#14213d; --paper:#fbf7ee; --line:#d8d2c4;
-    --red:#e63946; --gold:#f2b705; --muted:#6b7280; --win:#2a9d8f;
-  }
+  :root{ --ink:#14213d; --paper:#fbf7ee; --line:#d8d2c4; --red:#e63946; --gold:#f2b705; --muted:#6b7280; --win:#2a9d8f; }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--paper);color:var(--ink);
-    font:16px/1.45 "Avenir Next","Segoe UI",system-ui,sans-serif}
+  body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.45 "Avenir Next","Segoe UI",system-ui,sans-serif}
   main{max-width:520px;margin:0 auto;padding:20px 16px 48px}
   h1{font-size:34px;letter-spacing:-.02em;margin:0 0 4px}
   h2{font-size:22px;margin:0 0 8px}
   p{margin:6px 0}
   .sub{color:var(--muted)}
-  button{font:inherit;font-weight:600;border:2px solid var(--ink);background:var(--ink);
-    color:var(--paper);border-radius:10px;padding:12px 18px;cursor:pointer;width:100%}
+  button{font:inherit;font-weight:600;border:2px solid var(--ink);background:var(--ink);color:var(--paper);border-radius:10px;padding:12px 18px;cursor:pointer;width:100%}
   button.secondary{background:transparent;color:var(--ink)}
   button:disabled{opacity:.45;cursor:default}
   button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
@@ -26,7 +21,6 @@
   label{display:block;font-weight:600;margin:14px 0 6px}
   .hidden{display:none!important}
 
-  /* score strip */
   .strip{display:flex;gap:10px;margin:16px 0}
   .strip>div{flex:1;border:2px solid var(--line);border-radius:12px;padding:10px 12px;background:#fff}
   .strip .name{font-weight:700;display:flex;justify-content:space-between}
@@ -35,35 +29,29 @@
   .dot{width:9px;height:9px;border-radius:50%;background:#c4c4c4;display:inline-block;margin-top:7px}
   .dot.on{background:var(--win)}
 
-  /* the Pokémon on the block */
   .block{text-align:center;padding:12px 0 4px}
-  .block img{width:190px;height:190px;object-fit:contain;image-rendering:auto;
-    filter:drop-shadow(0 8px 14px rgba(20,33,61,.18))}
+  .block img{width:190px;height:190px;object-fit:contain;filter:drop-shadow(0 8px 14px rgba(20,33,61,.18))}
+  .block img.silhouette{filter:brightness(0) drop-shadow(0 8px 14px rgba(20,33,61,.18))}
   .block .num{color:var(--muted);font-weight:600}
   .block .mon{font-size:30px;font-weight:800;text-transform:capitalize;letter-spacing:-.02em;margin:0}
-  .types span{display:inline-block;background:var(--ink);color:var(--paper);border-radius:999px;
-    padding:2px 10px;font-size:13px;margin:6px 3px 0;text-transform:capitalize}
+  .types span,.tag{display:inline-block;background:var(--ink);color:var(--paper);border-radius:999px;padding:2px 10px;font-size:13px;margin:6px 3px 0;text-transform:capitalize}
   .stats{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin:12px 0 4px;font-size:12px}
   .stats div{background:#fff;border:1px solid var(--line);border-radius:8px;padding:5px 2px}
   .stats b{display:block;font-size:15px}
 
-  /* bidding */
   .bidrow{display:flex;gap:8px;align-items:stretch;margin:10px 0}
   .bidrow button{width:56px;font-size:22px;padding:0}
-  .bidrow .amt{flex:1;font-size:30px;font-weight:800;border:2px solid var(--ink);
-    border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:center;padding:0 8px}
-  .bidrow .amt input{border:0;padding:6px 0;width:5ch;font-size:30px;font-weight:800;text-align:left;-moz-appearance:textfield}
+  .bidrow .amt{flex:1;font-size:30px;font-weight:800;border:2px solid var(--ink);border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:center;padding:0 8px}
+  .bidrow .amt input{border:0;padding:6px 0;width:5ch;font-size:30px;font-weight:800;-moz-appearance:textfield}
   .bidrow .amt input::-webkit-inner-spin-button{-webkit-appearance:none}
   #bidSlider{width:100%;accent-color:var(--red);margin:4px 0 10px}
-  .hidden-mon{text-align:center}
-  .hidden-mon img{width:150px;height:150px;object-fit:contain}
   .seal{background:var(--red);border-color:var(--red)}
   .waiting{color:var(--muted);text-align:center;margin:12px 0}
+  .hidden-mon{text-align:center}
+  .hidden-mon img{width:150px;height:150px;object-fit:contain}
 
-  /* reveal: two sealed envelopes */
   .envelopes{display:flex;gap:12px;margin:12px 0}
-  .env{flex:1;border-radius:12px;padding:14px;text-align:center;background:#fff;border:2px solid var(--line);
-    transform:rotateX(90deg);animation:flip .5s ease-out forwards}
+  .env{flex:1;border-radius:12px;padding:14px;text-align:center;background:#fff;border:2px solid var(--line);transform:rotateX(90deg);animation:flip .5s ease-out forwards}
   .env:nth-child(2){animation-delay:.35s}
   .env .n{font-weight:700}
   .env .b{font-size:34px;font-weight:800;letter-spacing:-.02em}
@@ -72,13 +60,22 @@
   @keyframes flip{to{transform:none}}
   @media (prefers-reduced-motion:reduce){.env{animation:none;transform:none}}
 
-  /* teams */
   .teams{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px}
   .team h3{margin:0 0 6px;font-size:15px}
   .slots{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
-  .slot{aspect-ratio:1;border:2px dashed var(--line);border-radius:10px;display:flex;align-items:center;justify-content:center;background:#fff}
+  .slot{aspect-ratio:1;border:2px dashed var(--line);border-radius:10px;display:flex;align-items:center;justify-content:center;background:#fff;position:relative;padding:0}
   .slot img{width:90%;height:90%;object-fit:contain}
   .slot.filled{border-style:solid}
+  .slot .badge{position:absolute;bottom:2px;right:4px;font-size:11px;font-weight:700;background:var(--gold);border-radius:6px;padding:0 4px}
+  .slot .evo{position:absolute;top:2px;left:4px;font-size:11px;font-weight:700;color:var(--win)}
+  button.slot{cursor:pointer}
+  button.slot:disabled{opacity:.35}
+  button.slot.selected{border-color:var(--red);border-width:3px}
+  .typegrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:10px 0}
+  .typegrid button{padding:8px 4px;font-size:14px;text-transform:capitalize}
+  .typegrid button.selected{background:var(--red);border-color:var(--red)}
+  .evochoice{display:flex;gap:8px;margin:8px 0}
+  .evochoice button.selected{background:var(--red);border-color:var(--red)}
 
   .log{margin-top:20px;font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
   .log div{padding:2px 0}
@@ -90,39 +87,30 @@
 </head>
 <body>
 <main>
-
-  <!-- HOME -->
   <section id="home">
     <h1>PokéDraft</h1>
-    <p class="sub">Two trainers, £20 each, sealed bids. Six Pokémon per team. Bid big early or save for what comes later.</p>
+    <p class="sub">Two trainers, £20 each, sealed bids. Six Pokémon per team, then three upgrade auctions. Bid big early or save for later.</p>
     <label for="name">Your name</label>
     <input id="name" maxlength="16" placeholder="Ash">
     <div id="createBox">
       <label for="gen">Draft from</label>
       <select id="gen">
         <option value="all">Every Pokémon (1–1025)</option>
-        <option value="1">Gen 1 · Kanto</option>
-        <option value="2">Gen 2 · Johto</option>
-        <option value="3">Gen 3 · Hoenn</option>
-        <option value="4">Gen 4 · Sinnoh</option>
-        <option value="5">Gen 5 · Unova</option>
-        <option value="6">Gen 6 · Kalos</option>
-        <option value="7">Gen 7 · Alola</option>
-        <option value="8">Gen 8 · Galar</option>
+        <option value="1">Gen 1 · Kanto</option><option value="2">Gen 2 · Johto</option>
+        <option value="3">Gen 3 · Hoenn</option><option value="4">Gen 4 · Sinnoh</option>
+        <option value="5">Gen 5 · Unova</option><option value="6">Gen 6 · Kalos</option>
+        <option value="7">Gen 7 · Alola</option><option value="8">Gen 8 · Galar</option>
         <option value="9">Gen 9 · Paldea</option>
       </select>
-      <p></p>
-      <button id="createBtn">Create a room</button>
+      <p></p><button id="createBtn">Create a room</button>
     </div>
     <div id="joinBox" class="hidden">
       <p>You've been invited to room <b id="joinCode"></b>.</p>
-      <p></p>
-      <button id="joinBtn">Join the draft</button>
+      <p></p><button id="joinBtn">Join the draft</button>
     </div>
     <p class="err" id="homeErr"></p>
   </section>
 
-  <!-- GAME -->
   <section id="game" class="hidden">
     <div id="lobby">
       <h2>Room <span id="roomCode"></span></h2>
@@ -133,8 +121,7 @@
     </div>
 
     <div id="strip" class="strip"></div>
-
-    <div id="loading" class="hidden waiting">Drawing 12 Pokémon from the Pokédex…</div>
+    <div id="loading" class="hidden waiting">Loading from the Pokédex…</div>
 
     <div id="block" class="block hidden">
       <div class="num" id="roundLabel"></div>
@@ -142,6 +129,7 @@
       <p class="mon" id="monName"></p>
       <div class="types" id="monTypes"></div>
       <div class="stats" id="monStats"></div>
+      <p class="sub" id="lotNote"></p>
     </div>
 
     <div id="bidding" class="hidden">
@@ -160,20 +148,29 @@
       <div class="hidden-mon"><img id="hiddenImg" alt="Mystery Pokémon"></div>
       <label for="guess">Your guess (<span id="guessRange"></span>)</label>
       <input id="guess" type="number" inputmode="numeric">
-      <p></p>
-      <button id="guessBtn">Lock in guess</button>
+      <p></p><button id="guessBtn">Lock in guess</button>
       <p class="waiting hidden" id="guessWait">Guess locked. Waiting for your opponent…</p>
     </div>
 
     <div id="reveal" class="hidden">
       <div class="envelopes" id="envelopes"></div>
       <div class="verdict" id="verdict"></div>
-      <button id="nextBtn">Next Pokémon</button>
+      <button id="nextBtn">Continue</button>
+    </div>
+
+    <div id="choose" class="hidden">
+      <h2 id="chooseTitle"></h2>
+      <p class="sub" id="chooseHelp"></p>
+      <div class="slots" id="chooseSlots"></div>
+      <div class="evochoice hidden" id="evoChoice"></div>
+      <div class="typegrid hidden" id="typeGrid"></div>
+      <p></p><button id="confirmBtn" disabled>Confirm</button>
+      <p class="waiting hidden" id="chooseWait"></p>
     </div>
 
     <div id="done" class="hidden">
-      <h2>Draft complete</h2>
-      <p class="sub">Teams are set. Battle scene coming next.</p>
+      <h2>Teams locked</h2>
+      <p class="sub">Battle scene coming next.</p>
     </div>
 
     <div class="teams" id="teams"></div>
@@ -186,35 +183,27 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const socket = io();
-const url = new URL(location.href);
-const inviteCode = url.searchParams.get("room");
-let state = null, myId = null, bid = 0;
+const inviteCode = new URL(location.href).searchParams.get("room");
+let state = null, myId = null, bid = 0, pick = { slot: null, targetId: null, type: null };
 
-// ----- home -----
 $("name").value = localStorage.getItem("pd_name") || "";
 if (inviteCode) { $("createBox").classList.add("hidden"); $("joinBox").classList.remove("hidden"); $("joinCode").textContent = inviteCode; }
 
 function saveSession(code, playerId) {
   localStorage.setItem("pd_name", $("name").value);
-  localStorage.setItem("pd_session", JSON.stringify({ code, playerId }));
+  sessionStorage.setItem("pd_session", JSON.stringify({ code, playerId }));
   myId = playerId;
   history.replaceState(null, "", "?room=" + code);
   $("home").classList.add("hidden"); $("game").classList.remove("hidden");
 }
-$("createBtn").onclick = () =>
-  socket.emit("create", { name: $("name").value, gen: $("gen").value }, (r) => saveSession(r.code, r.playerId));
-$("joinBtn").onclick = () =>
-  socket.emit("join", { code: inviteCode, name: $("name").value }, (r) => r.error ? ($("homeErr").textContent = r.error) : saveSession(r.code, r.playerId));
-
-// rejoin after a refresh or a dropped connection
+$("createBtn").onclick = () => socket.emit("create", { name: $("name").value, gen: $("gen").value }, (r) => saveSession(r.code, r.playerId));
+$("joinBtn").onclick = () => socket.emit("join", { code: inviteCode, name: $("name").value }, (r) => r.error ? ($("homeErr").textContent = r.error) : saveSession(r.code, r.playerId));
 socket.on("connect", () => {
-  const sess = JSON.parse(localStorage.getItem("pd_session") || "null");
-  if (sess && (!inviteCode || inviteCode === sess.code)) {
-    socket.emit("join", { code: sess.code, playerId: sess.playerId }, (r) => { if (!r.error) saveSession(r.code, r.playerId); else localStorage.removeItem("pd_session"); });
-  }
+  const sess = JSON.parse(sessionStorage.getItem("pd_session") || "null");
+  if (sess && (!inviteCode || inviteCode === sess.code))
+    socket.emit("join", { code: sess.code, playerId: sess.playerId }, (r) => { if (!r.error) saveSession(r.code, r.playerId); else sessionStorage.removeItem("pd_session"); });
 });
 
-// ----- game actions -----
 $("copyBtn").onclick = () => navigator.clipboard.writeText($("shareUrl").value).then(() => $("copyBtn").textContent = "Copied");
 $("startBtn").onclick = () => socket.emit("start");
 $("minus").onclick = () => setBid(bid - 0.5);
@@ -224,31 +213,35 @@ $("bidAmt").onchange = (e) => setBid(Math.round(parseFloat(e.target.value || 0) 
 $("sealBtn").onclick = () => socket.emit("bid", bid);
 $("guessBtn").onclick = () => socket.emit("guess", parseInt($("guess").value, 10));
 $("nextBtn").onclick = () => socket.emit("next");
-socket.on("error_msg", (m) => $("gameErr").textContent = m);
+$("confirmBtn").onclick = () => { socket.emit("choose", pick); $("confirmBtn").disabled = true; };
+socket.on("error_msg", (m) => { $("gameErr").textContent = m; $("confirmBtn").disabled = false; });
 
 function setBid(v) {
   const me = state.players.find((p) => p.you);
   bid = Math.min(Math.max(0, isNaN(v) ? 0 : v), me.money);
-  $("bidAmt").value = bid.toFixed(2);
+  $("bidAmt").value = bid.toFixed(2); $("bidAmt").max = me.money;
   $("bidSlider").max = me.money; $("bidSlider").value = bid;
-  $("bidAmt").max = me.money;
 }
 
-// ----- render -----
 socket.on("state", (s) => { state = s; $("gameErr").textContent = ""; render(); });
+
+const STAT = [["HP","hp"],["Atk","attack"],["Def","defense"],["SpA","special-attack"],["SpD","special-defense"],["Spe","speed"]];
+const UPG = {
+  swap: { title: "Swap", note: "Winner must replace one of their Pokémon with this mystery Pokémon.", chooseTitle: "Choose who to swap out", help: "You'll see who it is after you confirm." },
+  evolve: { title: "Evolve", note: "Winner evolves one Pokémon a stage. Evolvable Pokémon are marked ↑ below.", chooseTitle: "Choose who evolves", help: "Only Pokémon marked ↑ can evolve." },
+  tm: { title: "TM", note: "Winner teaches one Pokémon a second move type for the battle.", chooseTitle: "Choose who learns the TM", help: "Pick a Pokémon, then a move type." },
+};
 
 function render() {
   const s = state, me = s.players.find((p) => p.you), other = s.players.find((p) => !p.you);
   const show = (id, on) => $(id).classList.toggle("hidden", !on);
 
-  // lobby
   show("lobby", s.phase === "lobby");
   $("roomCode").textContent = s.code;
   $("shareUrl").value = location.origin + "/?room=" + s.code;
   $("lobbyStatus").textContent = other ? `${other.name} is here.` : "Waiting for a second trainer…";
   $("startBtn").disabled = s.players.length < 2;
 
-  // money strip
   $("strip").innerHTML = s.players.map((p) => `
     <div class="${p.you ? "you" : ""}">
       <div class="name"><span>${esc(p.name)}${p.you ? " (you)" : ""}</span><span class="dot ${p.connected ? "on" : ""}"></span></div>
@@ -258,20 +251,32 @@ function render() {
 
   show("loading", s.phase === "loading");
 
-  // pokémon on the block
-  const mon = s.current || s.reveal?.pokemon;
-  show("block", !!mon && s.phase !== "done");
-  if (mon) {
-    $("roundLabel").textContent = `Pokémon ${s.round + 1} of ${s.poolSize} · No. ${mon.id}`;
-    $("monImg").src = mon.sprite; $("monImg").alt = mon.name;
-    $("monName").textContent = mon.name;
-    $("monTypes").innerHTML = mon.types.map((t) => `<span>${t}</span>`).join("");
-    const st = mon.stats;
-    $("monStats").innerHTML = [["HP", st.hp], ["Atk", st.attack], ["Def", st.defense], ["SpA", st["special-attack"]], ["SpD", st["special-defense"]], ["Spe", st.speed]]
-      .map(([k, v]) => `<div><b>${v}</b>${k}</div>`).join("");
+  // what's on the block
+  const lot = s.lot || s.reveal?.lot;
+  show("block", !!lot && s.phase !== "done" && s.phase !== "choose");
+  if (lot) {
+    if (lot.kind) {
+      const u = UPG[lot.kind];
+      $("roundLabel").textContent = `Upgrade ${s.upgrade.index + 1} of ${s.upgrade.total}`;
+      $("monName").textContent = u.title;
+      $("lotNote").textContent = u.note;
+      $("monStats").innerHTML = "";
+      if (lot.kind === "swap") {
+        $("monImg").src = lot.mystery.sprite; $("monImg").className = "silhouette"; $("monImg").alt = "Mystery Pokémon";
+        $("monTypes").innerHTML = lot.mystery.types.map((t) => `<span>${t}</span>`).join("");
+      } else { $("monImg").src = ""; $("monImg").className = ""; $("monTypes").innerHTML = ""; }
+      $("monImg").classList.toggle("hidden", lot.kind !== "swap");
+    } else {
+      $("monImg").classList.remove("hidden"); $("monImg").className = "";
+      $("roundLabel").textContent = `Pokémon ${s.round + 1} of ${s.poolSize} · No. ${lot.id}`;
+      $("monImg").src = lot.sprite; $("monImg").alt = lot.name;
+      $("monName").textContent = lot.name;
+      $("monTypes").innerHTML = lot.types.map((t) => `<span>${t}</span>`).join("");
+      $("monStats").innerHTML = STAT.map(([k, key]) => `<div><b>${lot.stats[key]}</b>${k}</div>`).join("");
+      $("lotNote").textContent = "";
+    }
   }
 
-  // bidding
   show("bidding", s.phase === "bidding");
   if (s.phase === "bidding") {
     if (!me.hasBid) setBid(Math.min(bid, me.money));
@@ -279,47 +284,77 @@ function render() {
     for (const id of ["sealBtn","minus","plus","bidSlider","bidAmt"]) $(id).disabled = me.hasBid;
   }
 
-  // tiebreak
   show("tiebreak", s.phase === "tiebreak");
   if (s.phase === "tiebreak") {
     $("guessRange").textContent = `${s.tiebreak.range[0]}–${s.tiebreak.range[1]}`;
-    $("hiddenImg").src = s.tiebreak.sprite || "";
     $("guess").min = s.tiebreak.range[0]; $("guess").max = s.tiebreak.range[1];
+    $("hiddenImg").src = s.tiebreak.sprite || "";
     $("guessBtn").disabled = me.hasGuessed; $("guess").disabled = me.hasGuessed;
     show("guessWait", me.hasGuessed);
   }
 
-  // reveal
-  show("reveal", s.phase === "reveal" || (s.phase === "done" && s.reveal));
+  show("reveal", s.phase === "reveal");
   if (s.reveal) {
-    const r = s.reveal;
+    const r = s.reveal, w = s.players.find((p) => p.id === r.winnerId);
     $("envelopes").innerHTML = s.players.map((p) => `
       <div class="env ${r.winnerId === p.id ? "winner" : ""}">
-        <div class="n">${esc(p.name)}</div>
-        <div class="b">£${r.bids[p.id].toFixed(2)}</div>
+        <div class="n">${esc(p.name)}</div><div class="b">£${r.bids[p.id].toFixed(2)}</div>
         ${r.tiebreak ? `<div class="sub">guessed #${r.tiebreak.guesses[p.id]}</div>` : ""}
       </div>`).join("");
-    const w = s.players.find((p) => p.id === r.winnerId);
+    const what = r.lot.kind ? `the ${UPG[r.lot.kind].title.toLowerCase()}` : r.lot.name;
     $("verdict").textContent = r.tiebreak
-      ? `Hidden number was #${r.tiebreak.target}. ${w.name} takes ${r.pokemon.name} (${r.tiebreak.reason}).`
-      : `${w.name} takes ${r.pokemon.name}.`;
-    $("nextBtn").classList.toggle("hidden", s.phase === "done");
-    if (s.phase === "reveal") bid = 0;
+      ? `Hidden number was #${r.tiebreak.target}. ${w.name} takes ${what} (${r.tiebreak.reason}).`
+      : `${w.name} takes ${what}.`;
+    $("nextBtn").textContent = s.stage === "draft" && s.round + 1 < s.poolSize ? "Next Pokémon" : "Continue";
+    bid = 0;
   }
+
+  // upgrade choice
+  show("choose", s.phase === "choose");
+  if (s.phase === "choose") {
+    const u = s.upgrade, cfg = UPG[u.kind], mine = u.winnerId === me.id;
+    $("chooseTitle").textContent = cfg.chooseTitle;
+    $("chooseHelp").textContent = cfg.help;
+    show("chooseWait", !mine); $("chooseWait").textContent = `${other.name} is choosing…`;
+    $("chooseSlots").classList.toggle("hidden", !mine);
+    $("confirmBtn").classList.toggle("hidden", !mine);
+    if (mine) {
+      $("chooseSlots").innerHTML = me.team.map((m, i) => {
+        const can = u.kind !== "evolve" || m.evolvesTo.length > 0;
+        return `<button class="slot filled ${pick.slot === i ? "selected" : ""}" data-i="${i}" ${can ? "" : "disabled"} title="${m.name}">
+          <img src="${m.sprite}" alt="${m.name}">${m.evolvesTo.length ? '<span class="evo">↑</span>' : ""}${m.tm ? `<span class="badge">${m.tm}</span>` : ""}</button>`;
+      }).join("");
+      for (const b of $("chooseSlots").querySelectorAll("button")) b.onclick = () => { pick.slot = +b.dataset.i; pick.targetId = null; render(); };
+      const sel = pick.slot !== null ? me.team[pick.slot] : null;
+      const branches = u.kind === "evolve" && sel && sel.evolvesTo.length > 1;
+      show("evoChoice", branches);
+      if (branches) {
+        $("evoChoice").innerHTML = sel.evolvesTo.map((e) => `<button class="secondary ${pick.targetId === e.id ? "selected" : ""}" data-id="${e.id}">${e.name}</button>`).join("");
+        for (const b of $("evoChoice").querySelectorAll("button")) b.onclick = () => { pick.targetId = +b.dataset.id; render(); };
+      }
+      show("typeGrid", u.kind === "tm");
+      if (u.kind === "tm") {
+        $("typeGrid").innerHTML = s.types.map((t) => `<button class="secondary ${pick.type === t ? "selected" : ""}" data-t="${t}">${t}</button>`).join("");
+        for (const b of $("typeGrid").querySelectorAll("button")) b.onclick = () => { pick.type = b.dataset.t; render(); };
+      }
+      const ready = sel && (u.kind === "swap" || (u.kind === "evolve" && (!branches || pick.targetId)) || (u.kind === "tm" && pick.type));
+      $("confirmBtn").disabled = !ready;
+      $("confirmBtn").textContent = sel ? `Confirm ${sel.name}` : "Confirm";
+    }
+  } else pick = { slot: null, targetId: null, type: null };
 
   show("done", s.phase === "done");
 
-  // teams
   $("teams").innerHTML = s.players.map((p) => `
     <div class="team"><h3>${esc(p.name)}'s team</h3><div class="slots">
       ${Array.from({ length: 6 }, (_, i) => p.team[i]
-        ? `<div class="slot filled" title="${p.team[i].name}"><img src="${p.team[i].sprite}" alt="${p.team[i].name}"></div>`
+        ? `<div class="slot filled" title="${p.team[i].name}"><img src="${p.team[i].sprite}" alt="${p.team[i].name}">
+            ${p.team[i].evolvesTo.length && s.stage !== "draft" ? '<span class="evo">↑</span>' : ""}${p.team[i].tm ? `<span class="badge">${p.team[i].tm}</span>` : ""}</div>`
         : `<div class="slot"></div>`).join("")}
     </div></div>`).join("");
 
   $("log").innerHTML = s.log.slice().reverse().map((l) => `<div>${esc(l)}</div>`).join("");
 }
-
 function esc(t) { return String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 </script>
 </body>

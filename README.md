@@ -17,7 +17,12 @@ or deploy to Render / Railway / Fly — it's a single Node process, no database 
 - When one player reaches 6, every remaining Pokémon goes to the other player for free.
 - Each drawn Pokémon carries base stats and types, ready for the battle step.
 
+## Upgrade auctions (after the draft)
+- Swap: mystery Pokémon (silhouette + types shown). Winner must swap one of theirs for it.
+- Evolve: winner evolves one Pokémon a stage (branching evolutions offer a choice).
+- TM: winner gives one Pokémon a second move type (stored as `tm`).
+- £0 bids allowed; a £0–£0 tie still goes to the tiebreak.
+
 ## Not yet built
 - Battle scene (state has everything needed: `players[].team[].stats / types`).
-- Spending leftover money on evolutions/items.
 - Random per-battle events.
